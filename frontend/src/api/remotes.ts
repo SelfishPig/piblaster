@@ -1,10 +1,11 @@
 import { request } from "./client";
-import type { Remote } from "../types";
+import type { Remote, RemoteLayout } from "../types";
 
 export type RemoteInput = {
   name: string;
   slug?: string;
   description?: string | null;
+  layout?: RemoteLayout | null;
 };
 
 export const remotesAPI = {

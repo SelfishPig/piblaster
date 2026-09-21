@@ -6,12 +6,14 @@ export function Modal({
   children,
   actions,
   onClose,
+  boxClassName = "",
 }: {
   open: boolean;
   title: string;
   children?: ReactNode;
   actions: ReactNode;
   onClose: () => void;
+  boxClassName?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
 
@@ -32,7 +34,7 @@ export function Modal({
         onClose();
       }}
     >
-      <div className="modal-box">
+      <div className={`modal-box ${boxClassName}`}>
         <h2 className="text-lg font-bold">{title}</h2>
         {children && <div className="py-4">{children}</div>}
         <div className="modal-action">{actions}</div>

@@ -1,11 +1,28 @@
 export type RemoteLayoutButton = {
-  commandId: number;
+  commandId: number | null;
   label?: string;
   icon?: string;
   size?: "normal" | "wide";
 };
 
+export type RemoteLayoutBlockType =
+  | "button-1"
+  | "button-2"
+  | "button-3"
+  | "arrow-wheel"
+  | "volume-channel"
+  | "rocker-buttons";
+
+export type RemoteLayoutBlock = {
+  id: string;
+  type: RemoteLayoutBlockType;
+  controls: RemoteLayoutButton[];
+};
+
 export type RemoteLayout = {
+  version?: 2;
+  rows?: RemoteLayoutBlock[];
+  // Kept for remotes created by older versions of PiBlaster.
   buttons?: RemoteLayoutButton[];
 };
 

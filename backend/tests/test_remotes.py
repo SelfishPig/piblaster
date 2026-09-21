@@ -21,3 +21,28 @@ def test_remote_slug_is_unique(client: TestClient) -> None:
     duplicate = client.post("/api/remotes", json={"name": "Other", "slug": "tv"})
     assert duplicate.status_code == 409
     assert "slug" in duplicate.json()["detail"].lower()
+
+
+def test_remote_layout_round_trip(client: TestClient) -> None:
+    layout = {
+        "version": 2,
+        "rows": [
+            {
+                "id": "navigation",
+                "type": "arrow-wheel",
+                "controls": [
+                    {"commandId": None, "icon": role}
+                    for role in ["up", "right", "down", "left", "ok"]
+                ],
+            }
+        ],
+    }
+    created = client.post("/api/remotes", json={"name": "TV", "layout": layout})
+    assert created.status_code == 201
+    assert created.json()["layout"] == layout
+
+    remote_id = created.json()["id"]
+    updated_layout = {"version": 2, "rows": []}
+    patched = client.patch(f"/api/remotes/{remote_id}", json={"layout": updated_layout})
+    assert patched.status_code == 200
+    assert patched.json()["layout"] == updated_layout

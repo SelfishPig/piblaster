@@ -2,7 +2,13 @@ import { Tv } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { commandsAPI } from "../api/commands";
 import { commandRole } from "../lib/commandRole";
-import type { Command, Remote } from "../types";
+import { controlFallback } from "../lib/remoteLayout";
+import type {
+  Command,
+  Remote,
+  RemoteLayoutBlock,
+  RemoteLayoutButton,
+} from "../types";
 import { RemoteButton } from "./RemoteButton";
 
 const mainRoles = new Set([
@@ -88,16 +94,37 @@ export function RemotePad({
   const others = commands.filter(
     (command) => !mainRoles.has(commandRole(command.slug)),
   );
-  const customLayout = remote.layout?.buttons?.length
+  const legacyLayout = remote.layout?.buttons?.length
     ? remote.layout.buttons
+    : null;
+  const customRows = Array.isArray(remote.layout?.rows)
+    ? remote.layout.rows
     : null;
 
   return (
     <div className="card mx-auto min-h-[44rem] w-full max-w-sm bg-neutral text-neutral-content shadow-2xl">
       <div className="card-body gap-0 px-5 py-6 sm:px-7 sm:py-8">
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
-          {control("input", "Input", { size: "lg", tone: "ghost" })}
-
+        <div className="mb-5 flex items-center justify-center gap-2">
+          <span
+            className={`status status-error ${ledOn ? "animate-ping" : "opacity-40"}`}
+            aria-hidden="true"
+          />
+          <span className="text-[10px] font-bold tracking-[0.18em] opacity-50 uppercase">
+            {ledOn ? "Transmitting" : "IR ready"}
+          </span>
+          <span className="sr-only" role="status" aria-live="polite">
+            {ledOn ? "Transmitting" : "Ready"}
+          </span>
+        </div>
+        <div
+          className={`grid items-center gap-3 ${
+            customRows
+              ? "mx-auto w-full max-w-64 grid-cols-1"
+              : "grid-cols-[auto_minmax(0,1fr)_auto]"
+          }`}
+        >
+          {!customRows &&
+            control("input", "Input", { size: "lg", tone: "ghost" })}
           <label className="select select-primary h-12 min-w-0 w-full">
             <Tv className="size-5 shrink-0" />
             <select
@@ -113,25 +140,31 @@ export function RemotePad({
             </select>
           </label>
 
-          <div className="flex items-center gap-3">
-            <span
-              className={`status status-error ${ledOn ? "animate-ping" : "opacity-30"}`}
-              aria-hidden="true"
-            />
-            <span className="sr-only" role="status" aria-live="polite">
-              {ledOn ? "Transmitting" : "Ready"}
-            </span>
-            {control("power", "Power", { size: "lg", tone: "ghost" })}
-          </div>
+          {!customRows &&
+            control("power", "Power", { size: "lg", tone: "ghost" })}
         </div>
 
-        {customLayout ? (
+        {customRows ? (
+          <div className="mt-9 grid gap-7">
+            {customRows.map((row) => (
+              <LayoutBlock key={row.id} row={row} byId={byId} onPress={send} />
+            ))}
+            {customRows.length === 0 && (
+              <p className="py-16 text-center text-sm opacity-50">
+                This remote does not have any controls yet.
+              </p>
+            )}
+          </div>
+        ) : legacyLayout ? (
           <div className="mt-12 grid grid-cols-3 justify-items-center gap-5">
-            {customLayout.map((button) => {
-              const command = byId.get(button.commandId);
+            {legacyLayout.map((button, index) => {
+              const command =
+                button.commandId === null
+                  ? undefined
+                  : byId.get(button.commandId);
               return (
                 <RemoteButton
-                  key={`${button.commandId}-${button.label ?? "button"}`}
+                  key={`${button.commandId}-${button.label ?? index}`}
                   label={button.label ?? command?.name ?? "Unavailable"}
                   role={button.icon ?? commandRole(command?.slug ?? "")}
                   disabled={!command}
@@ -225,6 +258,155 @@ export function RemotePad({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function LayoutBlock({
+  row,
+  byId,
+  onPress,
+}: {
+  row: RemoteLayoutBlock;
+  byId: Map<number, Command>;
+  onPress: (command?: Command) => void;
+}) {
+  const button = (
+    control: RemoteLayoutButton | undefined,
+    index: number,
+    options: ControlOptions = {},
+  ) => {
+    const command =
+      control?.commandId === null || control?.commandId === undefined
+        ? undefined
+        : byId.get(control.commandId);
+    const role =
+      control?.icon && control.icon !== "custom"
+        ? control.icon
+        : commandRole(command?.slug ?? "");
+    return (
+      <RemoteButton
+        key={index}
+        label={control?.label ?? command?.name ?? controlFallback(role, index)}
+        role={role}
+        disabled={!command}
+        size="lg"
+        onPress={() => onPress(command)}
+        {...options}
+      />
+    );
+  };
+
+  if (row.type.startsWith("button-")) {
+    const columns = Number(row.type.slice(-1));
+    return (
+      <div
+        className="grid items-center justify-items-center gap-4"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
+        {row.controls.map((control, index) =>
+          button(control, index, {
+            shape: columns === 1 ? "pill" : "circle",
+            className: columns === 1 ? "w-full" : "",
+          }),
+        )}
+      </div>
+    );
+  }
+
+  if (row.type === "arrow-wheel") {
+    return (
+      <div className="relative mx-auto aspect-square w-full max-w-72 rounded-full bg-neutral-content/15 shadow-inner">
+        {button(row.controls[0], 0, {
+          size: "xl",
+          tone: "ghost",
+          className: "absolute top-3 left-1/2 -translate-x-1/2",
+        })}
+        {button(row.controls[1], 1, {
+          size: "xl",
+          tone: "ghost",
+          className: "absolute top-1/2 right-3 -translate-y-1/2",
+        })}
+        {button(row.controls[2], 2, {
+          size: "xl",
+          tone: "ghost",
+          className: "absolute bottom-3 left-1/2 -translate-x-1/2",
+        })}
+        {button(row.controls[3], 3, {
+          size: "xl",
+          tone: "ghost",
+          className: "absolute top-1/2 left-3 -translate-y-1/2",
+        })}
+        {button(row.controls[4], 4, {
+          size: "dpad",
+          className:
+            "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-xl",
+        })}
+      </div>
+    );
+  }
+
+  if (row.type === "volume-channel") {
+    return (
+      <div className="grid grid-cols-3 items-center justify-items-center gap-4">
+        <VerticalRocker label="Volume">
+          {button(row.controls[0], 0, {
+            shape: "default",
+            className: "join-item",
+          })}
+          {button(row.controls[1], 1, {
+            shape: "default",
+            className: "join-item",
+          })}
+        </VerticalRocker>
+        {button(row.controls[2], 2, { size: "xl" })}
+        <VerticalRocker label="Channel">
+          {button(row.controls[3], 3, {
+            shape: "default",
+            className: "join-item",
+          })}
+          {button(row.controls[4], 4, {
+            shape: "default",
+            className: "join-item",
+          })}
+        </VerticalRocker>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 items-center justify-items-center gap-5">
+      <VerticalRocker label="Volume">
+        {button(row.controls[0], 0, {
+          shape: "default",
+          className: "join-item",
+        })}
+        {button(row.controls[1], 1, {
+          shape: "default",
+          className: "join-item",
+        })}
+      </VerticalRocker>
+      <div className="grid gap-3">
+        {button(row.controls[2], 2, { shape: "circle" })}
+        {button(row.controls[3], 3, { shape: "circle" })}
+      </div>
+    </div>
+  );
+}
+
+function VerticalRocker({
+  children,
+  label,
+}: {
+  children: ReactNode;
+  label: string;
+}) {
+  return (
+    <div className="text-center">
+      <span className="mb-1 block text-[10px] font-bold tracking-widest opacity-50 uppercase">
+        {label}
+      </span>
+      <div className="join join-vertical shadow-md">{children}</div>
     </div>
   );
 }
