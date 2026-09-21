@@ -1,0 +1,27 @@
+[Unit]
+Description=PiBlaster infrared remote service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=piblaster
+Group=piblaster
+SupplementaryGroups=video
+WorkingDirectory=/opt/piblaster/backend
+Environment=PIBLASTER_IR_BACKEND=linux
+Environment=PIBLASTER_DATABASE_PATH=/var/lib/piblaster/piblaster.db
+Environment=PIBLASTER_HOST=0.0.0.0
+Environment=PIBLASTER_PORT=8000
+ExecStart=/opt/piblaster/backend/.venv/bin/python -m app
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/piblaster
+
+[Install]
+WantedBy=multi-user.target

@@ -6,13 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
+    "lint": "oxlint src",
+    "lint:fix": "oxlint --fix src",
+    "format": "prettier --write .",
+    "typecheck": "tsc -b --pretty false",
     "preview": "vite preview"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "lucide-react": "^0.544.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-router-dom": "^7.9.1",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
@@ -20,7 +25,10 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "daisyui": "^5.7.42",
     "oxlint": "^1.81.0",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.6.14",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
   }
