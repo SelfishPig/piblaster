@@ -102,19 +102,25 @@ export function RemotePad({
     : null;
 
   return (
-    <div className="card mx-auto min-h-[44rem] w-full max-w-sm bg-neutral text-neutral-content shadow-2xl">
+    <div className="card mx-auto min-h-176 w-full max-w-sm bg-base-100 text-neutral-content shadow-xl border border-base-300">
       <div className="card-body gap-0 px-5 py-6 sm:px-7 sm:py-8">
         <div className="mb-5 flex items-center justify-center gap-2">
-          <span
-            className={`status status-error ${ledOn ? "animate-ping" : "opacity-40"}`}
+          <div
+            className={`status ${ledOn ? "status-error" : "opacity-40"} size-4`}
             aria-hidden="true"
           />
-          <span className="text-[10px] font-bold tracking-[0.18em] opacity-50 uppercase">
-            {ledOn ? "Transmitting" : "IR ready"}
-          </span>
-          <span className="sr-only" role="status" aria-live="polite">
-            {ledOn ? "Transmitting" : "Ready"}
-          </span>
+          <select
+              aria-label="Choose remote"
+              className="select"
+              value={remote.id}
+              onChange={(event) => onRemoteChange(Number(event.target.value))}
+            >
+              {remotes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+          </select>
         </div>
         <div
           className={`grid items-center gap-3 ${
@@ -125,20 +131,6 @@ export function RemotePad({
         >
           {!customRows &&
             control("input", "Input", { size: "lg", tone: "ghost" })}
-          <label className="select select-primary h-12 min-w-0 w-full">
-            <Tv className="size-5 shrink-0" />
-            <select
-              aria-label="Choose remote"
-              value={remote.id}
-              onChange={(event) => onRemoteChange(Number(event.target.value))}
-            >
-              {remotes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
 
           {!customRows &&
             control("power", "Power", { size: "lg", tone: "ghost" })}
@@ -306,8 +298,8 @@ function LayoutBlock({
       >
         {row.controls.map((control, index) =>
           button(control, index, {
-            shape: columns === 1 ? "pill" : "circle",
-            className: columns === 1 ? "w-full" : "",
+            shape: columns === 1 ? "square" : "square",
+            className: columns === 1 ? "w-full" : "w-full",
           }),
         )}
       </div>

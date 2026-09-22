@@ -1,6 +1,5 @@
 import {
   Radio,
-  RadioTower,
   RotateCcw,
   Save,
   Send,
@@ -132,33 +131,25 @@ export function LearnPage() {
             <li className={`step ${session.signal ? "step-primary" : ""}`}>
               Review
             </li>
-            <li className={`step ${saved ? "step-primary" : ""}`}>Save</li>
+            <li className={`step ${name.trim() || slug ? "step-primary" : ""}`}>Save</li>
           </ul>
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              <StatusBadge
-                ok={session.connection === "connected"}
-                activeIcon={Wifi}
-                inactiveIcon={WifiOff}
-              >
-                {`Socket ${session.connection}`}
-              </StatusBadge>
-              <StatusBadge
-                ok={session.active}
-                activeIcon={RadioTower}
-                inactiveIcon={Radio}
-              >
-                {session.active ? "Learning active" : "Learning stopped"}
-              </StatusBadge>
-            </div>
+            <StatusBadge
+              ok={session.connection === "connected"}
+              activeIcon={Wifi}
+              inactiveIcon={WifiOff}
+            >
+              {`Socket ${session.connection}`}
+            </StatusBadge>
             {isMock && (
-              <span className="badge badge-secondary badge-soft">
+              <span className="badge badge-info">
                 <FlaskConical className="size-3.5" />
                 Mock tools enabled
               </span>
             )}
           </div>
-
+          
+          <div className="rounded-box p-5 bg-base-200">
           <Field label="Remote">
             <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
               <select
@@ -184,6 +175,7 @@ export function LearnPage() {
               </Button>
             </div>
           </Field>
+          </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
             {!session.active ? (
@@ -198,11 +190,11 @@ export function LearnPage() {
               </Button>
             ) : (
               <Button
-                variant="secondary"
+                variant="danger"
                 disabled={busy}
                 onClick={() => void perform(session.stop)}
               >
-                <Square className="size-4" /> Stop
+                <Square className="size-4" /> Stop learning
               </Button>
             )}
             {isMock && session.active && (
@@ -217,23 +209,23 @@ export function LearnPage() {
           </div>
 
           {!session.signal ? (
-            <div className="hero mt-8 rounded-box bg-base-200 px-5 py-14 text-center">
+            <div className="mt-8 rounded-box bg-base-200 px-5 py-10 text-center">
               <Radio
                 className={`mx-auto size-10 ${session.active ? "animate-pulse text-primary" : "text-base-content/40"}`}
               />
-              <h2 className="mt-4 font-semibold">
+              <p className="font-semibold">
                 {session.active
                   ? "Waiting for an IR signal"
                   : "Ready when you are"}
-              </h2>
-              <p className="mt-1 text-sm text-base-content/60">
+              </p>
+              <p className="text-sm text-base-content/60">
                 {session.active
                   ? "Point the physical remote at the receiver and press a button."
                   : "Choose a remote and start learning."}
               </p>
             </div>
           ) : (
-            <div className="mt-6 grid gap-4">
+            <div className="mt-6 grid gap-4 rounded-box bg-base-200 p-5">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Command name">
                   <Input
@@ -255,32 +247,12 @@ export function LearnPage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  disabled={busy}
-                  variant="secondary"
-                  onClick={() =>
-                    void perform(
-                      () => commandsAPI.testSignal(session.signal!),
-                      "Test signal sent",
-                    )
-                  }
-                >
-                  <Send className="size-4" /> Test
-                </Button>
-                <Button
                   disabled={busy || !name.trim() || !slug}
                   onClick={() => void save()}
                 >
                   <Save className="size-4" /> Save command
                 </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    session.setSignal(null);
-                    setSaved(false);
-                  }}
-                >
-                  <RotateCcw className="size-4" /> Discard & learn again
-                </Button>
+
               </div>
             </div>
           )}
@@ -310,12 +282,31 @@ export function LearnPage() {
                 <dt className="text-base-content/60">
                   Raw waveform · {session.signal.raw.length} timings
                 </dt>
-                <dd className="mockup-code mt-2 max-h-60 overflow-auto text-xs">
-                  <pre data-prefix="$">
+                <dd className="rounded-box bg-black p-5 mt-2 w-full overflow-hidden">
                     <code>{session.signal.raw.join(", ")}</code>
-                  </pre>
                 </dd>
               </div>
+              <Button
+                  disabled={busy}
+                  variant="secondary"
+                  onClick={() =>
+                    void perform(
+                      () => commandsAPI.testSignal(session.signal!),
+                      "Test signal sent",
+                    )
+                  }
+                >
+                  <Send className="size-4" /> Test
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    session.setSignal(null);
+                    setSaved(false);
+                  }}
+                >
+                  <RotateCcw className="size-4" /> Discard
+                </Button>
             </dl>
           ) : (
             <p className="mt-3 text-sm text-base-content/60">

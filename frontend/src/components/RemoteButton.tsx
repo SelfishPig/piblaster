@@ -70,7 +70,7 @@ export function RemoteButton({
   disabled,
   wide,
   shape = "circle",
-  size = "md",
+  size = "xl",
   tone,
   className = "",
   onPress,
