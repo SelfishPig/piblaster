@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.models import Command, Remote
 from app.schemas.command import CommandCreate, CommandUpdate
 from app.schemas.remote import RemoteCreate, RemoteUpdate
+from app.services.layout_service import clear_commands
 
 
 class ConflictError(ValueError):
@@ -49,7 +50,6 @@ def create_remote(session: Session, data: RemoteCreate) -> Remote:
         name=data.name,
         slug=slugify(data.slug or data.name),
         description=data.description,
-        layout=data.layout,
     )
     session.add(remote)
     _commit(session)
@@ -71,16 +71,16 @@ def update_remote(session: Session, remote: Remote, data: RemoteUpdate) -> Remot
 
 
 def delete_remote(session: Session, remote: Remote) -> None:
+    clear_commands(session, {command.id for command in remote.commands})
     session.delete(remote)
     _commit(session)
 
 
-def list_commands(session: Session, remote_id: int) -> list[Command]:
-    return list(
-        session.scalars(
-            select(Command).where(Command.remote_id == remote_id).order_by(Command.name)
-        )
-    )
+def list_commands(session: Session, remote_id: int | None = None) -> list[Command]:
+    query = select(Command).order_by(Command.name, Command.id)
+    if remote_id is not None:
+        query = query.where(Command.remote_id == remote_id)
+    return list(session.scalars(query))
 
 
 def get_command(session: Session, command_id: int) -> Command | None:
@@ -99,6 +99,8 @@ def create_command(session: Session, remote_id: int, data: CommandCreate) -> Com
         name=data.name.strip(),
         slug=slugify(data.slug or data.name),
         protocol=data.protocol,
+        role=data.role,
+        button_text=data.button_text,
         address=data.address,
         command=data.command,
         carrier_frequency=data.carrier_frequency,
@@ -124,5 +126,6 @@ def update_command(session: Session, item: Command, data: CommandUpdate) -> Comm
 
 
 def delete_command(session: Session, item: Command) -> None:
+    clear_commands(session, {item.id})
     session.delete(item)
     _commit(session)

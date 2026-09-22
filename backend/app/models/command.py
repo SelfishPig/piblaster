@@ -21,6 +21,8 @@ class Command(Base):
     remote_id: Mapped[int] = mapped_column(ForeignKey("remotes.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(120))
     slug: Mapped[str] = mapped_column(String(120))
+    role: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    button_text: Mapped[str | None] = mapped_column(String(120), nullable=True)
     protocol: Mapped[str | None] = mapped_column(String(80), nullable=True)
     address: Mapped[str | None] = mapped_column(String(80), nullable=True)
     command: Mapped[str | None] = mapped_column(String(80), nullable=True)

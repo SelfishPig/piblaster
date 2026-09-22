@@ -11,9 +11,11 @@ import {
   controlFallback,
   createLayoutBlock,
   layoutBlockOptions,
+  layoutBlocks,
 } from "../lib/remoteLayout";
 import type {
   Command,
+  Remote,
   RemoteLayoutBlock,
   RemoteLayoutBlockType,
 } from "../types";
@@ -22,13 +24,20 @@ import { Button } from "./Button";
 export function RemoteLayoutEditor({
   rows,
   commands,
+  remotes,
   onChange,
 }: {
   rows: RemoteLayoutBlock[];
   commands: Command[];
+  remotes: Remote[];
   onChange: (rows: RemoteLayoutBlock[]) => void;
 }) {
   const [addType, setAddType] = useState<RemoteLayoutBlockType>("button-1");
+
+  const commandGroups = remotes.map((remote) => ({
+    remote,
+    commands: commands.filter((command) => command.remoteId === remote.id),
+  }));
 
   const addBlock = () => {
     onChange([...rows, createLayoutBlock(addType, commands)]);
@@ -136,7 +145,9 @@ export function RemoteLayoutEditor({
                   <Trash2 className="size-3.5" />
                 </button>
               </div>
-              <ControlGrid type={row.type}>
+              <div
+                className={`grid gap-2 ${layoutBlocks[row.type].editorGridClass}`}
+              >
                 {row.controls.map((control, controlIndex) => (
                   <label
                     key={`${row.id}-${controlIndex}`}
@@ -158,20 +169,37 @@ export function RemoteLayoutEditor({
                       }
                     >
                       <option value="">Unassigned</option>
-                      {commands.map((command) => (
-                        <option key={command.id} value={command.id}>
-                          {command.name}
-                        </option>
-                      ))}
+                      {control.commandId !== null &&
+                        !commands.some(
+                          (command) => command.id === control.commandId,
+                        ) && (
+                          <option value={control.commandId}>
+                            Unavailable command
+                          </option>
+                        )}
+                      {commandGroups
+                        .filter((group) => group.commands.length > 0)
+                        .map((group) => (
+                          <optgroup
+                            key={group.remote.id}
+                            label={group.remote.name}
+                          >
+                            {group.commands.map((command) => (
+                              <option key={command.id} value={command.id}>
+                                {command.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
                     </select>
                   </label>
                 ))}
-              </ControlGrid>
+              </div>
             </div>
           ))}
           {rows.length === 0 && (
             <div className="rounded-box border border-dashed border-neutral-content/25 px-6 py-12 text-center">
-              <p className="font-semibold">Your remote is empty</p>
+              <p className="font-semibold">Your layout is empty</p>
               <p className="mt-1 text-sm opacity-60">
                 Add a block above to start building the layout.
               </p>
@@ -181,24 +209,4 @@ export function RemoteLayoutEditor({
       </div>
     </div>
   );
-}
-
-function ControlGrid({
-  type,
-  children,
-}: {
-  type: RemoteLayoutBlockType;
-  children: React.ReactNode;
-}) {
-  const classes =
-    type === "button-1"
-      ? "grid-cols-1"
-      : type === "button-2"
-        ? "grid-cols-2"
-        : type === "button-3"
-          ? "grid-cols-3"
-          : type === "arrow-wheel"
-            ? "grid-cols-2 sm:grid-cols-3"
-            : "grid-cols-2";
-  return <div className={`grid gap-2 ${classes}`}>{children}</div>;
 }

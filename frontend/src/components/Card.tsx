@@ -10,7 +10,7 @@ export function Card({
   bodyClassName?: string;
 }) {
   return (
-    <section className={`card bg-base-100 shadow-sm ${className}`}>
+    <section className={`card bg-base-200 shadow-sm ${className}`}>
       <div className={`card-body ${bodyClassName}`}>{children}</div>
     </section>
   );

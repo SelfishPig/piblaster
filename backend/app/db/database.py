@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db.migrations import migrate
 from app.db.models import Base
 
 
@@ -24,7 +25,9 @@ class Database:
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False)
 
     def create_tables(self) -> None:
-        Base.metadata.create_all(self.engine)
+        with self.engine.begin() as connection:
+            Base.metadata.create_all(connection)
+            migrate(connection)
 
     def session(self) -> Generator[Session]:
         with self.session_factory() as session:

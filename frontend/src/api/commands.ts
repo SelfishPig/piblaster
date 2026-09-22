@@ -1,9 +1,11 @@
 import { request } from "./client";
-import type { Command, IRSignal } from "../types";
+import type { Command, CommandRole, IRSignal } from "../types";
 
 export type CommandInput = {
   name: string;
   slug?: string;
+  role?: CommandRole | null;
+  buttonText?: string | null;
   protocol?: string | null;
   address?: string | null;
   command?: string | null;
@@ -12,8 +14,12 @@ export type CommandInput = {
 };
 
 export const commandsAPI = {
-  list: (remoteId: number) =>
-    request<Command[]>(`/api/remotes/${remoteId}/commands`),
+  list: (remoteId?: number) =>
+    request<Command[]>(
+      remoteId === undefined
+        ? "/api/commands"
+        : `/api/remotes/${remoteId}/commands`,
+    ),
   create: (remoteId: number, data: CommandInput) =>
     request<Command>(`/api/remotes/${remoteId}/commands`, {
       method: "POST",

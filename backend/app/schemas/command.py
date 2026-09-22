@@ -1,13 +1,46 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field, field_validator
 
 from app.schemas.base import APIModel
 
+CommandRole = Literal[
+    "none",
+    "custom",
+    "power",
+    "input",
+    "up",
+    "right",
+    "down",
+    "left",
+    "ok",
+    "back",
+    "home",
+    "menu",
+    "volume-up",
+    "volume-down",
+    "mute",
+    "channel-up",
+    "channel-down",
+]
 
-class CommandCreate(APIModel):
+
+class CommandAppearance(APIModel):
+    role: CommandRole | None = None
+    button_text: str | None = Field(default=None, max_length=120)
+
+    @field_validator("button_text")
+    @classmethod
+    def normalize_button_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+
+class CommandCreate(CommandAppearance):
     name: str = Field(min_length=1, max_length=120)
     slug: str | None = Field(default=None, min_length=1, max_length=120)
     protocol: str | None = Field(default=None, max_length=80)
@@ -24,7 +57,7 @@ class CommandCreate(APIModel):
         return value
 
 
-class CommandUpdate(APIModel):
+class CommandUpdate(CommandAppearance):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     slug: str | None = Field(default=None, min_length=1, max_length=120)
     protocol: str | None = Field(default=None, max_length=80)
@@ -46,6 +79,8 @@ class CommandRead(APIModel):
     remote_id: int
     name: str
     slug: str
+    role: CommandRole | None
+    button_text: str | None
     protocol: str | None
     address: str | None
     command: str | None

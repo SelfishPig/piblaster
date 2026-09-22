@@ -10,7 +10,7 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
-from app.api import commands, learn, remotes, system
+from app.api import commands, layouts, learn, remotes, system
 from app.config import Settings
 from app.db.database import Database
 from app.ir.base import IRDevice
@@ -75,6 +75,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.database = database
     app.state.ir_service = ir_service
     app.include_router(remotes.router)
+    app.include_router(layouts.router)
     app.include_router(commands.router)
     app.include_router(learn.router)
     app.include_router(system.router)

@@ -1,71 +1,70 @@
-import { RadioTower } from "lucide-react";
+import { PanelsTopLeft } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { commandsAPI } from "../api/commands";
-import { remotesAPI } from "../api/remotes";
+import { layoutsAPI } from "../api/layouts";
 import { Card } from "../components/Card";
 import { RemotePad } from "../components/RemotePad";
 import { useToast } from "../hooks/useToast";
-import type { Command, Remote } from "../types";
+import type { Command, Layout } from "../types";
 
 export function HomePage() {
-  const [remotes, setRemotes] = useState<Remote[]>([]);
-  const [commands, setCommands] = useState<Record<number, Command[]>>({});
+  const [layouts, setLayouts] = useState<Layout[]>([]);
+  const [commands, setCommands] = useState<Command[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
   useEffect(() => {
     let active = true;
-
-    void remotesAPI
-      .list()
-      .then(async (items) => {
-        const entries = await Promise.all(
-          items.map(
-            async (remote) =>
-              [remote.id, await commandsAPI.list(remote.id)] as const,
-          ),
-        );
+    void Promise.all([layoutsAPI.list(), commandsAPI.list()])
+      .then(([items, allCommands]) => {
         if (!active) return;
-        setRemotes(items);
-        setCommands(Object.fromEntries(entries));
+        setLayouts(items);
+        setCommands(allCommands);
         setSelectedId(items[0]?.id ?? null);
       })
       .catch((reason: unknown) => {
-        if (!active) return;
-        showToast(
-          reason instanceof Error ? reason.message : "Could not load remotes",
-          "error",
-        );
+        if (active)
+          showToast(
+            reason instanceof Error ? reason.message : "Could not load layouts",
+            "error",
+          );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
-
     return () => {
       active = false;
     };
   }, [showToast]);
 
-  const remote = remotes.find((item) => item.id === selectedId);
-
-  if (!remote) {
+  const layout = layouts.find((item) => item.id === selectedId);
+  if (loading)
+    return <p className="py-14 text-center opacity-60">Loading layouts...</p>;
+  if (!layout) {
     return (
       <Card
         className="mx-auto max-w-lg"
-        bodyClassName="items-center py-14 text-center"
+        bodyClassName="items-center text-center"
       >
-        <RadioTower className="mx-auto size-10 text-base-content/40" />
-        <h2 className="card-title mt-4">No remotes yet</h2>
-        <p className="mt-1 text-sm text-base-content/60">
-          Create one in Remotes, then learn its first command.
+        <PanelsTopLeft className="size-10" />
+        <h2 className="card-title">No layouts yet</h2>
+        <p>
+          Learn commands, then combine them into a layout.
         </p>
+        <Link className="btn btn-primary" to="/layouts">
+          Create a layout
+        </Link>
       </Card>
     );
   }
-
   return (
     <RemotePad
-      remote={remote}
-      remotes={remotes}
-      commands={commands[remote.id] ?? []}
-      onRemoteChange={setSelectedId}
+      layout={layout}
+      layouts={layouts}
+      commands={commands}
+      onLayoutChange={setSelectedId}
     />
   );
 }

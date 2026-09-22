@@ -16,31 +16,42 @@ import { remotesAPI } from "../api/remotes";
 import { systemAPI } from "../api/system";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
+import { CommandLibrary } from "../components/CommandLibrary";
+import { CommandAppearanceFields } from "../components/CommandAppearanceFields";
 import { Field, Input, selectClass } from "../components/Field";
 import { StatusBadge } from "../components/StatusBadge";
 import { Modal } from "../components/Modal";
 import { useLearningSession } from "../hooks/useLearningSession";
 import { useToast } from "../hooks/useToast";
 import { slugify } from "../lib/slug";
-import type { Remote } from "../types";
+import { inferCommandRole } from "../lib/commandRole";
+import type { Command, CommandRole, Remote } from "../types";
 
 export function LearnPage() {
   const session = useLearningSession();
   const [remotes, setRemotes] = useState<Remote[]>([]);
+  const [commands, setCommands] = useState<Command[]>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(true);
   const [remoteId, setRemoteId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
+  const [role, setRole] = useState<CommandRole | "auto">("auto");
+  const [buttonText, setButtonText] = useState("");
   const [isMock, setIsMock] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [newRemoteOpen, setNewRemoteOpen] = useState(false);
   const [newRemoteName, setNewRemoteName] = useState("");
   const { showToast } = useToast();
 
   useEffect(() => {
-    void Promise.all([remotesAPI.list(), systemAPI.status()])
-      .then(([items, status]) => {
+    void Promise.all([
+      remotesAPI.list(),
+      systemAPI.status(),
+      commandsAPI.list(),
+    ])
+      .then(([items, status, allCommands]) => {
+        setCommands(allCommands);
         setRemotes(items);
         setRemoteId(items[0]?.id ?? null);
         setIsMock(status.irBackend === "mock");
@@ -52,12 +63,9 @@ export function LearnPage() {
             : "Could not load learning data",
           "error",
         ),
-      );
+      )
+      .finally(() => setLoadingLibrary(false));
   }, [showToast]);
-
-  useEffect(() => {
-    if (session.signal) setSaved(false);
-  }, [session.signal]);
 
   useEffect(() => {
     if (session.error) showToast(session.error, "error");
@@ -88,25 +96,27 @@ export function LearnPage() {
   const save = async () => {
     if (!session.signal || remoteId === null) return;
     const signal = session.signal;
-    const saved = await perform(
-      () =>
-        commandsAPI.create(remoteId, {
-          name,
-          slug,
-          protocol: signal.protocol,
-          address: signal.address,
-          command: signal.command,
-          carrierFrequency: signal.carrierFrequency,
-          rawSignal: signal.raw,
-        }),
-      `${name} saved`,
-    );
+    const saved = await perform(async () => {
+      const command = await commandsAPI.create(remoteId, {
+        name,
+        slug,
+        role: role === "auto" ? inferCommandRole(slug) : role,
+        buttonText: buttonText.trim() || null,
+        protocol: signal.protocol,
+        address: signal.address,
+        command: signal.command,
+        carrierFrequency: signal.carrierFrequency,
+        rawSignal: signal.raw,
+      });
+      setCommands((items) => [...items, command]);
+    }, `${name} saved`);
     if (!saved) return;
-    setSaved(true);
     session.setSignal(null);
     setName("");
     setSlug("");
     setSlugEdited(false);
+    setRole("auto");
+    setButtonText("");
   };
   const createRemote = async () => {
     const remoteName = newRemoteName.trim();
@@ -131,7 +141,9 @@ export function LearnPage() {
             <li className={`step ${session.signal ? "step-primary" : ""}`}>
               Review
             </li>
-            <li className={`step ${name.trim() || slug ? "step-primary" : ""}`}>Save</li>
+            <li className={`step ${name.trim() || slug ? "step-primary" : ""}`}>
+              Save
+            </li>
           </ul>
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <StatusBadge
@@ -148,33 +160,33 @@ export function LearnPage() {
               </span>
             )}
           </div>
-          
-          <div className="rounded-box p-5 bg-base-200">
-          <Field label="Remote">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-              <select
-                className={selectClass}
-                value={remoteId ?? ""}
-                onChange={(event) => setRemoteId(Number(event.target.value))}
-              >
-                {remotes.length === 0 && (
-                  <option value="">Create a remote first</option>
-                )}
-                {remotes.map((remote) => (
-                  <option key={remote.id} value={remote.id}>
-                    {remote.name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setNewRemoteOpen(true)}
-              >
-                New
-              </Button>
-            </div>
-          </Field>
+
+          <div className="rounded-box p-5 bg-base-100">
+            <Field label="Remote">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <select
+                  className={selectClass}
+                  value={remoteId ?? ""}
+                  onChange={(event) => setRemoteId(Number(event.target.value))}
+                >
+                  {remotes.length === 0 && (
+                    <option value="">Create a remote first</option>
+                  )}
+                  {remotes.map((remote) => (
+                    <option key={remote.id} value={remote.id}>
+                      {remote.name}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setNewRemoteOpen(true)}
+                >
+                  New
+                </Button>
+              </div>
+            </Field>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -182,7 +194,6 @@ export function LearnPage() {
               <Button
                 disabled={busy || remoteId === null}
                 onClick={() => {
-                  setSaved(false);
                   void perform(session.start);
                 }}
               >
@@ -209,7 +220,7 @@ export function LearnPage() {
           </div>
 
           {!session.signal ? (
-            <div className="mt-8 rounded-box bg-base-200 px-5 py-10 text-center">
+            <div className="mt-8 rounded-box bg-base-100 px-5 py-10 text-center">
               <Radio
                 className={`mx-auto size-10 ${session.active ? "animate-pulse text-primary" : "text-base-content/40"}`}
               />
@@ -245,14 +256,20 @@ export function LearnPage() {
                   />
                 </Field>
               </div>
+              <CommandAppearanceFields
+                role={role}
+                buttonText={buttonText}
+                slug={slug}
+                onRoleChange={setRole}
+                onButtonTextChange={setButtonText}
+              />
               <div className="flex flex-wrap gap-2">
                 <Button
-                  disabled={busy || !name.trim() || !slug}
+                  disabled={busy || remoteId === null || !name.trim() || !slug}
                   onClick={() => void save()}
                 >
                   <Save className="size-4" /> Save command
                 </Button>
-
               </div>
             </div>
           )}
@@ -283,30 +300,31 @@ export function LearnPage() {
                   Raw waveform · {session.signal.raw.length} timings
                 </dt>
                 <dd className="rounded-box bg-black p-5 mt-2 w-full overflow-hidden">
-                    <code>{session.signal.raw.join(", ")}</code>
+                  <code>{session.signal.raw.join(", ")}</code>
                 </dd>
               </div>
               <Button
-                  disabled={busy}
-                  variant="secondary"
-                  onClick={() =>
-                    void perform(
-                      () => commandsAPI.testSignal(session.signal!),
-                      "Test signal sent",
-                    )
-                  }
-                >
-                  <Send className="size-4" /> Test
-                </Button>
-                <Button
-                  variant="danger"
-                  onClick={() => {
-                    session.setSignal(null);
-                    setSaved(false);
-                  }}
-                >
-                  <RotateCcw className="size-4" /> Discard
-                </Button>
+                disabled={busy}
+                variant="secondary"
+                onClick={() =>
+                  void perform(
+                    () => commandsAPI.testSignal(session.signal!),
+                    "Test signal sent",
+                  )
+                }
+              >
+                <Send className="size-4" /> Test
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  session.setSignal(null);
+                  setRole("auto");
+                  setButtonText("");
+                }}
+              >
+                <RotateCcw className="size-4" /> Discard
+              </Button>
             </dl>
           ) : (
             <p className="mt-3 text-sm text-base-content/60">
@@ -315,6 +333,34 @@ export function LearnPage() {
           )}
         </Card>
       </div>
+      <CommandLibrary
+        remotes={remotes}
+        commands={commands}
+        loading={loadingLibrary}
+        onAddRemote={() => setNewRemoteOpen(true)}
+        onCommandUpdated={(command) =>
+          setCommands((items) =>
+            items.map((item) => (item.id === command.id ? command : item)),
+          )
+        }
+        onCommandDeleted={(id) =>
+          setCommands((items) => items.filter((item) => item.id !== id))
+        }
+        onRemoteUpdated={(remote) =>
+          setRemotes((items) =>
+            items.map((item) => (item.id === remote.id ? remote : item)),
+          )
+        }
+        onRemoteDeleted={(id) => {
+          setRemotes((items) => items.filter((item) => item.id !== id));
+          setCommands((items) => items.filter((item) => item.remoteId !== id));
+          setRemoteId((current) =>
+            current === id
+              ? (remotes.find((item) => item.id !== id)?.id ?? null)
+              : current,
+          );
+        }}
+      />
       <Modal
         open={newRemoteOpen}
         title="Create remote"

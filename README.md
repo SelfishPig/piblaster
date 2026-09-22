@@ -5,7 +5,7 @@ raw waveform from a physical remote, keeps the waveform alongside any decoded
 protocol data in SQLite, and retransmits commands from a phone-friendly web UI
 or REST API. It is designed for a trusted LAN and has no cloud dependency.
 
-> Screenshot placeholder: Remote, Learn, Remotes, and Status views.
+> Screenshot placeholder: Home, Learn, Layouts, and Status views.
 
 ## Architecture
 
@@ -19,6 +19,12 @@ The React + TypeScript frontend uses Vite, Tailwind CSS, daisyUI, Oxlint, and Pr
 Development requests use relative `/api` and `/ws` URLs through Vite's proxy. A
 production Vite build is served by FastAPI, including SPA fallbacks such as
 `/learn`.
+
+Remotes organize learned commands on the Learn page, where commands can be edited,
+run, or deleted. Layouts are independent control surfaces that can combine commands
+from any remote. Create and edit them on Layouts, then use them on Home. Deleting a
+layout keeps its commands; deleting a command unassigns it from layouts. Existing
+saved remote layouts are copied into independent layouts once on startup.
 
 The Status page theme selector includes System plus all enabled daisyUI themes.
 The choice is stored locally in the browser; System follows the OS light/dark
@@ -51,8 +57,8 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>. Mock IR is the default. Create a remote, open
-Learn, start learning, and select **Simulate signal**. The equivalent API call is:
+Open <http://localhost:5173>. Mock IR is the default. Open Learn, create a remote,
+start learning, and select **Simulate signal**. The equivalent API call is:
 
 ```bash
 curl -X POST http://localhost:8000/api/dev/mock-signal
@@ -97,8 +103,15 @@ curl -X POST http://localhost:8000/api/remotes \
   -H 'Content-Type: application/json' \
   -d '{"name":"Living Room TV","description":"Main television"}'
 
-# List a remote's commands
+# List all commands or one remote's commands
+curl http://localhost:8000/api/commands
 curl http://localhost:8000/api/remotes/1/commands
+
+# Create a layout (command IDs may belong to different remotes)
+curl http://localhost:8000/api/layouts
+curl -X POST http://localhost:8000/api/layouts \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Living Room","rows":[{"id":"controls","type":"button-2","controls":[{"commandId":1},{"commandId":2}]}]}'
 
 # Transmit by database ID or friendly slugs
 curl -X POST http://localhost:8000/api/commands/12/send

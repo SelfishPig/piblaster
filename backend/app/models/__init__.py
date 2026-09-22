@@ -1,4 +1,5 @@
 from app.models.command import Command
+from app.models.layout import Layout
 from app.models.remote import Remote
 
-__all__ = ["Command", "Remote"]
+__all__ = ["Command", "Layout", "Remote"]

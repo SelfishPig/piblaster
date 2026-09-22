@@ -1,8 +1,9 @@
+import type { ButtonRoleName } from "./components/remote/blocks/ButtonRoles";
+
 export type RemoteLayoutButton = {
   commandId: number | null;
-  label?: string;
-  icon?: string;
-  size?: "normal" | "wide";
+  label?: string | null;
+  icon?: string | null;
 };
 
 export type RemoteLayoutBlockType =
@@ -19,11 +20,13 @@ export type RemoteLayoutBlock = {
   controls: RemoteLayoutButton[];
 };
 
-export type RemoteLayout = {
-  version?: 2;
-  rows?: RemoteLayoutBlock[];
-  // Kept for remotes created by older versions of PiBlaster.
-  buttons?: RemoteLayoutButton[];
+export type Layout = {
+  id: number;
+  name: string;
+  description: string | null;
+  rows: RemoteLayoutBlock[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Remote = {
@@ -31,14 +34,17 @@ export type Remote = {
   name: string;
   slug: string;
   description: string | null;
-  layout: RemoteLayout | null;
   createdAt: string;
   updatedAt: string;
 };
 
+export type CommandRole = ButtonRoleName;
+
 export type Command = {
   id: number;
   remoteId: number;
+  role: CommandRole | null;
+  buttonText: string | null;
   name: string;
   slug: string;
   protocol: string | null;

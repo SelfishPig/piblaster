@@ -29,6 +29,8 @@ def test_mock_signal_websocket_and_save(client: TestClient, remote: dict[str, ob
         f"/api/remotes/{remote['id']}/commands",
         json={
             "name": "Power",
+            "role": "power",
+            "buttonText": "On / Off",
             "protocol": signal["protocol"],
             "address": signal["address"],
             "command": signal["command"],
@@ -38,6 +40,8 @@ def test_mock_signal_websocket_and_save(client: TestClient, remote: dict[str, ob
     )
     assert saved.status_code == 201
     assert saved.json()["slug"] == "power"
+    assert saved.json()["role"] == "power"
+    assert saved.json()["buttonText"] == "On / Off"
 
 
 def test_mock_injection_requires_learning(client: TestClient) -> None:

@@ -1,4 +1,12 @@
-export function commandRole(slug: string): string {
+import type { Command, CommandRole } from "../types";
+
+export function commandRole(
+  command: Pick<Command, "role" | "slug">,
+): CommandRole {
+  return command.role ?? inferCommandRole(command.slug);
+}
+
+export function inferCommandRole(slug: string): CommandRole {
   const normalized = slug.toLowerCase();
   if (/vol(ume)?-?(up|plus)|volume\+/.test(normalized)) return "volume-up";
   if (/vol(ume)?-?(down|minus)|volume-/.test(normalized)) return "volume-down";
@@ -16,8 +24,8 @@ export function commandRole(slug: string): string {
     "home",
     "menu",
     "input",
-  ]) {
+  ] as const) {
     if (normalized === role || normalized.endsWith(`-${role}`)) return role;
   }
-  return normalized;
+  return "custom";
 }

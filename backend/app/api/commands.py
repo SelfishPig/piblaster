@@ -34,6 +34,11 @@ async def _send(item: Command, ir_service: IRServiceDependency) -> SendResult:
     return SendResult(command_id=item.id)
 
 
+@router.get("/api/commands", response_model=list[CommandRead])
+def get_commands(session: SessionDependency) -> list[object]:
+    return list(remote_service.list_commands(session))
+
+
 @router.get("/api/commands/{command_id}", response_model=CommandRead)
 def get_command(command_id: int, session: SessionDependency) -> object:
     item = remote_service.get_command(session, command_id)
