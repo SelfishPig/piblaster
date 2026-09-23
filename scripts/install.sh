@@ -21,9 +21,12 @@ apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   avahi-daemon curl lirc nodejs npm rsync v4l-utils
 
-if ! command -v uv >/dev/null 2>&1; then
+UV_BIN="$(command -v uv || true)"
+if [[ -z "$UV_BIN" ]]; then
   echo "==> Installing uv"
-  UV_INSTALL_DIR=/usr/local/bin curl -LsSf https://astral.sh/uv/install.sh | sh
+  # The install directory must be passed to the shell running the installer.
+  curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+  UV_BIN=/usr/local/bin/uv
 fi
 
 NODE_MAJOR="$(node --version | sed -E 's/^v([0-9]+).*/\1/')"
@@ -53,7 +56,7 @@ rsync -a --delete \
 
 echo "==> Installing backend dependencies"
 cd "$INSTALL_DIR/backend"
-uv sync --frozen --no-dev
+"$UV_BIN" sync --frozen --no-dev
 
 echo "==> Building frontend"
 cd "$INSTALL_DIR/frontend"
