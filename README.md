@@ -183,14 +183,17 @@ docker run --privileged --rm tonistiigi/binfmt --install arm
 The frontend build and Python lockfile export run on the host architecture.
 Python, native dependencies, and the PyInstaller bootloader build in the ARMv6
 `balenalib/rpi:build` environment. The first build can be slow under emulation; later builds
-reuse Docker's cached layers. `BUILD_JOBS` defaults to 2 to limit compiler memory
-use. Extra arguments pass through to Buildx:
+reuse Docker's cached layers. The build script defaults `BUILD_JOBS` to the host's
+available logical CPU count for Python and Rust compilation. Set the `BUILD_JOBS`
+environment variable or pass an explicit build argument to override it. Extra
+arguments pass through to Buildx:
 
 ```bash
 ./scripts/build-executable.sh --progress plain --build-arg BUILD_JOBS=4
 ```
 
-The equivalent direct command is:
+For a direct build, the Dockerfile defaults to the CPU count available inside
+the builder. You can also pass `--build-arg BUILD_JOBS=<count>` explicitly:
 
 ```bash
 docker buildx build \
