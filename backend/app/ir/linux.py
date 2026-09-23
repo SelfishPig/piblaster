@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 
 from app.ir.base import IRDevice
@@ -47,9 +48,11 @@ class LinuxIRDevice(IRDevice):
         for device in sorted(Path("/dev").glob("lirc*")):
             capabilities = self._capabilities(ir_ctl, device)
             lowered = capabilities.lower()
-            if self.rx_device is None and ("receive" in lowered or "rec_mode2" in lowered):
+            # Headings and "Device cannot receive/send" also contain those verbs.
+            # Only accept an explicit positive raw-IR capability.
+            if self.rx_device is None and "device can receive raw ir" in lowered:
                 self.rx_device = device
-            if self.tx_device is None and ("send" in lowered or "send_pulse" in lowered):
+            if self.tx_device is None and "device can send raw ir" in lowered:
                 self.tx_device = device
         logger.info("Discovered Linux IR devices: rx=%s tx=%s", self.rx_device, self.tx_device)
 
@@ -65,10 +68,19 @@ class LinuxIRDevice(IRDevice):
                 check=False,
                 text=True,
                 timeout=2,
-                env=_ir_environment(),
+                env={**(_ir_environment() or os.environ), "LC_ALL": "C"},
             )
-            return result.stdout + result.stderr
-        except (OSError, subprocess.TimeoutExpired):
+            if result.returncode:
+                logger.warning(
+                    "Cannot inspect IR device %s (exit %s): %s",
+                    device,
+                    result.returncode,
+                    result.stderr.strip(),
+                )
+                return ""
+            return result.stdout
+        except (OSError, subprocess.TimeoutExpired) as error:
+            logger.warning("Cannot inspect IR device %s: %s", device, error)
             return ""
 
     @property
@@ -101,38 +113,61 @@ class LinuxIRDevice(IRDevice):
         ir_ctl = shutil.which("ir-ctl")
         if ir_ctl is None:
             raise RuntimeError("ir-ctl is not installed")
-        self._receive_process = await asyncio.create_subprocess_exec(
+        process = await asyncio.create_subprocess_exec(
             ir_ctl,
             "--device",
             str(self.rx_device),
             "--receive",
+            "--mode2",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=_ir_environment(),
         )
-        assert self._receive_process.stdout is not None
+        self._receive_process = process
+        assert process.stdout is not None
+        assert process.stderr is not None
+        stderr_task = asyncio.create_task(process.stderr.read())
         raw: list[int] = []
-        while self._learning:
-            try:
-                line = await asyncio.wait_for(self._receive_process.stdout.readline(), timeout=0.15)
-            except TimeoutError:
-                if raw:
-                    break
-                continue
-            if not line:
-                break
-            parts = line.decode(errors="replace").strip().split()
-            if len(parts) == 2 and parts[0] in {"pulse", "space"}:
+        terminated = False
+        try:
+            while self._learning:
                 try:
-                    raw.append(int(parts[1]))
-                except ValueError:
+                    line = await asyncio.wait_for(process.stdout.readline(), timeout=0.15)
+                except TimeoutError:
+                    if raw:
+                        break
                     continue
-        if self._receive_process and self._receive_process.returncode is None:
-            self._receive_process.terminate()
-            await self._receive_process.wait()
-        self._receive_process = None
+                if not line:
+                    await process.wait()
+                    break
+                parts = line.decode(errors="replace").strip().split()
+                if len(parts) == 2 and parts[0] in {"pulse", "space"}:
+                    try:
+                        raw.append(int(parts[1]))
+                    except ValueError:
+                        continue
+        finally:
+            if process.returncode is None:
+                terminated = True
+                with suppress(ProcessLookupError):
+                    process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=1)
+                except TimeoutError:
+                    with suppress(ProcessLookupError):
+                        process.kill()
+                    await process.wait()
+            stderr = (await stderr_task).decode(errors="replace").strip()
+            if self._receive_process is process:
+                self._receive_process = None
+        if process.returncode and not terminated:
+            detail = stderr or "no error output"
+            raise RuntimeError(
+                f"ir-ctl receive failed on {self.rx_device} (exit {process.returncode}): {detail}"
+            )
         if not raw:
-            raise RuntimeError("IR receiver stopped without capturing a signal")
+            detail = stderr or "no pulse/space data received"
+            raise RuntimeError(f"IR receiver {self.rx_device} stopped without a signal: {detail}")
         return IRSignal(carrier_frequency=38_000, raw=raw)
 
     async def transmit(self, signal: IRSignal) -> None:
