@@ -20,7 +20,7 @@ echo "==> Installing operating-system packages"
 apt-get update
 # Native Python dependencies may need source builds on 32-bit Raspberry Pi OS.
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-  avahi-daemon build-essential cargo curl lirc nodejs npm python3-dev rsync rustc v4l-utils
+  avahi-daemon build-essential curl lirc nodejs npm python3-dev rsync v4l-utils
 
 UV_BIN="$(command -v uv || true)"
 if [[ -z "$UV_BIN" ]]; then
@@ -28,6 +28,36 @@ if [[ -z "$UV_BIN" ]]; then
   # The install directory must be passed to the shell running the installer.
   curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
   UV_BIN=/usr/local/bin/uv
+fi
+
+echo "==> Checking Rust build toolchain"
+# Keep this aligned with the source-build requirements in backend/uv.lock.
+RUST_MIN_VERSION=1.88.0
+rust_is_usable() {
+  local version
+  version="$(rustc --version 2>/dev/null | awk '{print $2}')" || return 1
+  [[ -n "$version" ]] && dpkg --compare-versions "$version" ge "$RUST_MIN_VERSION" &&
+    cargo --version >/dev/null 2>&1
+}
+
+if ! rust_is_usable; then
+  # Keep build tools outside INSTALL_DIR, which rsync updates with --delete.
+  export CARGO_HOME=/opt/piblaster-build/cargo
+  export RUSTUP_HOME=/opt/piblaster-build/rustup
+  export PATH="$CARGO_HOME/bin:$PATH"
+  export RUSTUP_TOOLCHAIN="$RUST_MIN_VERSION"
+  if ! rust_is_usable; then
+    echo "==> Installing Rust $RUST_MIN_VERSION for native Python dependencies"
+    if [[ ! -x "$CARGO_HOME/bin/rustup" ]]; then
+      curl --proto '=https' --tlsv1.2 -fsS https://sh.rustup.rs | \
+        sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
+    fi
+    "$CARGO_HOME/bin/rustup" toolchain install "$RUST_MIN_VERSION" --profile minimal
+  fi
+fi
+if ! rust_is_usable; then
+  echo "Rust $RUST_MIN_VERSION or newer and Cargo are required to build backend dependencies." >&2
+  exit 1
 fi
 
 NODE_MAJOR="$(node --version | sed -E 's/^v([0-9]+).*/\1/')"
