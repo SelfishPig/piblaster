@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -10,6 +12,19 @@ from app.ir.base import IRDevice
 from app.ir.types import IRSignal
 
 logger = logging.getLogger(__name__)
+
+
+def _ir_environment() -> dict[str, str] | None:
+    if not getattr(sys, "frozen", False):
+        return None
+    # ir-ctl belongs to the OS and must not load PyInstaller's bundled libraries.
+    env = os.environ.copy()
+    original = env.get("LD_LIBRARY_PATH_ORIG")
+    if original is None:
+        env.pop("LD_LIBRARY_PATH", None)
+    else:
+        env["LD_LIBRARY_PATH"] = original
+    return env
 
 
 class LinuxIRDevice(IRDevice):
@@ -50,6 +65,7 @@ class LinuxIRDevice(IRDevice):
                 check=False,
                 text=True,
                 timeout=2,
+                env=_ir_environment(),
             )
             return result.stdout + result.stderr
         except (OSError, subprocess.TimeoutExpired):
@@ -92,6 +108,7 @@ class LinuxIRDevice(IRDevice):
             "--receive",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=_ir_environment(),
         )
         assert self._receive_process.stdout is not None
         raw: list[int] = []
@@ -141,6 +158,7 @@ class LinuxIRDevice(IRDevice):
                 f"--send={path}",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=_ir_environment(),
             )
             _, stderr = await process.communicate()
             if process.returncode:

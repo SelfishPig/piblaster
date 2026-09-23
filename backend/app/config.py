@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,7 +24,9 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> Settings:
-        root = Path(__file__).resolve().parents[2]
+        # PyInstaller extracts bundled assets beside the app package. Keep the
+        # database path independent of this temporary resource tree.
+        root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
         frontend = os.getenv("PIBLASTER_FRONTEND_DIST")
         backend = os.getenv("PIBLASTER_IR_BACKEND", "mock").lower()
         if backend not in {"mock", "linux"}:

@@ -149,6 +149,133 @@ not desired.
 `scripts/build.sh` syncs the locked Python and npm environments, runs formatting,
 linting, type checks and backend tests, then creates `frontend/dist`.
 
+### Single executable for ARMv6
+
+On an amd64 or arm64 development machine using Linux containers, run:
+
+```bash
+./scripts/build-executable.sh
+```
+
+This uses Docker Buildx with `--platform linux/arm/v6` and PyInstaller's
+`--onefile` mode to produce **`dist/linux-armv6/piblaster`**, including Python,
+backend dependencies, and the built frontend. The target is **32-bit Raspberry
+Pi OS on ARMv6**, including Pi 1 and the original Pi Zero/Zero W. The build uses
+**`balenalib/rpi:build`**. The executable needs an ARM hard-float loader and a
+glibc version compatible with that base image; it is not a fully static binary.
+Python, Node.js, and Docker are not needed on the Pi.
+
+The build machine needs Docker with the Buildx plugin and ARM emulation or an
+additional native ARMv6 builder node. Check available platforms with `docker buildx inspect
+--bootstrap`. If necessary, create a builder:
+
+```bash
+docker buildx create --name piblaster-builder --driver docker-container --use --bootstrap
+```
+
+Docker Desktop includes emulation. If your Linux builder cannot execute ARM
+build steps, install the ARM QEMU handler and retry:
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install arm
+```
+
+The frontend build and Python lockfile export run on the host architecture.
+Python, native dependencies, and the PyInstaller bootloader build in the ARMv6
+`balenalib/rpi:build` environment. The first build can be slow under emulation; later builds
+reuse Docker's cached layers. `BUILD_JOBS` defaults to 2 to limit compiler memory
+use. Extra arguments pass through to Buildx:
+
+```bash
+./scripts/build-executable.sh --progress plain --build-arg BUILD_JOBS=4
+```
+
+The equivalent direct command is:
+
+```bash
+docker buildx build \
+  --platform linux/arm/v6 \
+  --file deploy/Dockerfile.executable \
+  --target artifact \
+  --output type=local,dest=dist/linux-armv6 \
+  .
+```
+
+Before export, the build starts the executable in mock mode from an empty
+directory and checks the API, SQLite writes, frontend assets, SPA routes, and
+WebSocket handshake. Run `./scripts/build.sh` separately for the full development
+quality checks.
+
+Copy `dist/linux-armv6/piblaster` to the Pi, then run it from a writable directory:
+
+```bash
+chmod +x ./piblaster
+./piblaster
+```
+
+Open `http://<pi-hostname>:8000`. All configuration variables above still apply;
+the frontend defaults to the bundled assets. SQLite defaults to `piblaster.db`
+in the working directory and remains outside the temporary bundle extraction.
+PyInstaller needs a writable temporary directory that permits execution.
+
+For real IR hardware, install `v4l-utils` (which supplies `ir-ctl`), configure
+the overlays and device permissions below, and run:
+
+```bash
+sudo apt-get install v4l-utils
+PIBLASTER_IR_BACKEND=linux ./piblaster
+```
+
+This build creates an executable only. Use the binary installer below to set up
+the service, or use the separate source installer to run a Python checkout.
+
+### Install the executable on a Pi Zero W
+
+Once the installer and built executable are published to GitHub, run this on
+32-bit Raspberry Pi OS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/selfishpig/piblaster/main/scripts/install-zero-w.sh | sudo bash
+```
+
+The installer downloads `dist/linux-armv6/piblaster` from the repository's `main`
+branch. It installs only runtime OS packages, creates the `piblaster` account,
+grants access through the `video` group, installs the executable at
+`/opt/piblaster/piblaster`, enables Avahi, and enables and restarts
+`piblaster.service`. No Python, Node.js, Rust, or application compilation is
+required on the Pi. The service starts in Linux IR mode on port 8000, serves the
+bundled frontend, and stores its database in `/var/lib/piblaster/piblaster.db`.
+
+Re-running the installer replaces the executable while preserving the database.
+It also supports switching an existing source installation to the executable,
+using the same service name and data directory. Optional environment overrides
+can be placed in `/etc/default/piblaster`, then applied with
+`sudo systemctl restart piblaster`. Boot overlays and the hostname are configured
+manually as described below; the installer does not reboot the Pi.
+
+To select a different GitHub repository or a branch, tag, or commit containing
+the executable, pass `PIBLASTER_REPO` and/or `PIBLASTER_REF` to the installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/selfishpig/piblaster/main/scripts/install-zero-w.sh \
+  | sudo env PIBLASTER_REF=v0.1.0 bash
+```
+
+For publishing: `/dist/` is ignored by Git, so explicitly add the actual built
+binary when preparing the commit you intend to publish:
+
+```bash
+git add scripts/install-zero-w.sh README.md
+git add -f dist/linux-armv6/piblaster
+```
+
+Commit and push those files to `main` (or the selected ref) before using the curl
+command. The download path must contain the actual executable, not a Git LFS
+pointer. The installer rejects missing downloads and non-ARM ELF files before
+replacing an existing executable.
+
+### Install from source
+
 On Raspberry Pi OS or Debian, from a checkout:
 
 ```bash

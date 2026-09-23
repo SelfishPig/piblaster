@@ -1,0 +1,192 @@
+# syntax=docker/dockerfile:1
+
+# ---------------------------------------------------------------------------
+# Frontend
+# Runs natively on the build host; output is architecture-independent.
+# ---------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS frontend
+
+WORKDIR /src/frontend
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+
+# ---------------------------------------------------------------------------
+# Export locked Python requirements
+# Also architecture-independent, so run natively.
+# ---------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM ghcr.io/astral-sh/uv:0.10.12 AS uv
+
+FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS requirements
+
+COPY --from=uv /uv /usr/local/bin/uv
+
+WORKDIR /src/backend
+
+COPY backend/pyproject.toml backend/uv.lock ./
+
+RUN uv export \
+    --frozen \
+    --no-dev \
+    --no-emit-project \
+    --format requirements-txt \
+    --output-file /requirements.txt
+
+
+# ---------------------------------------------------------------------------
+# ARMv6 / glibc builder
+# ---------------------------------------------------------------------------
+FROM --platform=$TARGETPLATFORM balenalib/rpi:bookworm-build AS builder
+
+ARG TARGETPLATFORM
+ARG BUILD_JOBS=2
+
+ARG PYTHON_VERSION=3.12.14
+ARG PYTHON_SHA256=5c8462af5790baf43a321a1559dbe0db06d1be4300fb85fb53c40060668e548a
+
+ARG RUST_VERSION=1.88.0
+ARG MATURIN_VERSION=1.10.2
+ARG PYINSTALLER_VERSION=6.22.0
+
+RUN test "$TARGETPLATFORM" = "linux/arm/v6" || \
+    { echo "This Dockerfile targets linux/arm/v6 only." >&2; exit 1; }
+
+# Explicit ARMv6 flags prevent QEMU's reported CPU capabilities from causing
+# ARMv7+ instructions to leak into compiled dependencies.
+ENV \
+    CFLAGS="-O2 -march=armv6 -mfpu=vfp -mfloat-abi=hard" \
+    CXXFLAGS="-O2 -march=armv6 -mfpu=vfp -mfloat-abi=hard" \
+    CARGO_BUILD_TARGET="arm-unknown-linux-gnueabihf" \
+    CARGO_BUILD_JOBS="${BUILD_JOBS}" \
+    RUSTUP_HOME="/opt/rustup" \
+    CARGO_HOME="/opt/cargo" \
+    PATH="/opt/cargo/bin:/usr/local/bin:${PATH}" \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        binutils \
+        ca-certificates \
+        curl \
+        pkg-config \
+        xz-utils \
+        zlib1g-dev \
+        libbz2-dev \
+        libffi-dev \
+        liblzma-dev \
+        libreadline-dev \
+        libsqlite3-dev \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# ---------------------------------------------------------------------------
+# CPython 3.12
+#
+# Build our own shared Python so the PyInstaller executable does not depend
+# on whatever Python version happens to ship in the Balena image.
+# ---------------------------------------------------------------------------
+WORKDIR /tmp/python
+
+RUN curl -fsSL \
+        "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz" \
+        -o python.tar.xz \
+    && echo "${PYTHON_SHA256}  python.tar.xz" | sha256sum -c - \
+    && tar -xf python.tar.xz --strip-components=1 \
+    && ./configure \
+        --enable-shared \
+        --with-ensurepip=install \
+    && make -j "${BUILD_JOBS}" \
+    && make install \
+    && ldconfig \
+    && rm -rf /tmp/python
+
+
+# ---------------------------------------------------------------------------
+# Rust
+#
+# Required when dependencies such as pydantic-core/watchfiles lack ARMv6
+# wheels and therefore need to be compiled from source.
+# ---------------------------------------------------------------------------
+WORKDIR /tmp
+
+RUN curl -fsSL \
+        "https://static.rust-lang.org/rustup/dist/arm-unknown-linux-gnueabihf/rustup-init" \
+        -o rustup-init \
+    && chmod +x rustup-init \
+    && ./rustup-init \
+        -y \
+        --profile minimal \
+        --no-modify-path \
+        --default-host arm-unknown-linux-gnueabihf \
+        --default-toolchain "${RUST_VERSION}" \
+    && rm rustup-init
+
+
+# ---------------------------------------------------------------------------
+# Python dependencies
+# ---------------------------------------------------------------------------
+COPY --from=requirements /requirements.txt /tmp/requirements.txt
+
+RUN echo "maturin==${MATURIN_VERSION}" > /tmp/build-constraints.txt \
+    && PIP_CONSTRAINT=/tmp/build-constraints.txt \
+       python3.12 -m pip install \
+        --require-hashes \
+        --no-deps \
+        --platform linux_armv6l \
+        --target /opt/piblaster-deps \
+        -r /tmp/requirements.txt
+
+ENV PYTHONPATH="/opt/piblaster-deps"
+
+
+# Build PyInstaller itself on ARMv6 so its bootloader is ARMv6.
+RUN PYINSTALLER_COMPILE_BOOTLOADER=1 \
+    python3.12 -m pip install \
+        --no-binary pyinstaller \
+        "pyinstaller==${PYINSTALLER_VERSION}"
+
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
+WORKDIR /src/backend
+
+COPY backend/app/ app/
+COPY --from=frontend /src/frontend/dist/ /src/frontend/dist/
+
+RUN python3.12 -m PyInstaller \
+    --noconfirm \
+    --clean \
+    --onefile \
+    --name piblaster \
+    --paths /src/backend \
+    --hidden-import app.main \
+    --collect-submodules uvicorn \
+    --hidden-import sqlalchemy.dialects.sqlite \
+    --add-data /src/frontend/dist:frontend/dist \
+    --distpath /out \
+    --workpath /tmp/pyinstaller \
+    --specpath /tmp \
+    app/__main__.py
+
+
+# ---------------------------------------------------------------------------
+# Verify executable while still running under ARMv6 QEMU.
+# ---------------------------------------------------------------------------
+COPY scripts/smoke-executable.py /tmp/smoke-executable.py
+
+RUN QEMU_CPU=arm1176 \
+    python3.12 /tmp/smoke-executable.py /out/piblaster
+
+
+# ---------------------------------------------------------------------------
+# Exportable artifact
+# ---------------------------------------------------------------------------
+FROM scratch AS artifact
+
+COPY --from=builder --chmod=0755 /out/piblaster /piblaster
