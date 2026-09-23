@@ -18,8 +18,9 @@ fi
 
 echo "==> Installing operating-system packages"
 apt-get update
+# Native Python dependencies may need source builds on 32-bit Raspberry Pi OS.
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-  avahi-daemon curl lirc nodejs npm rsync v4l-utils
+  avahi-daemon build-essential cargo curl lirc nodejs npm python3-dev rsync rustc v4l-utils
 
 UV_BIN="$(command -v uv || true)"
 if [[ -z "$UV_BIN" ]]; then

@@ -159,6 +159,11 @@ The idempotent installer copies the app to `/opt/piblaster`, stores data in
 `/var/lib/piblaster`, runs it as the `piblaster` user, enables Avahi, and installs
 the systemd unit. It deliberately does not edit boot configuration or reboot.
 
+The installer includes C/C++ build tools, Python development headers, and Rust/Cargo
+for dependencies that need to compile from source. This is especially relevant on
+32-bit Raspberry Pi OS, where prebuilt Python packages may be unavailable. The
+first dependency installation can take a while on older Pi hardware.
+
 Configure the kernel overlays in the boot config used by your OS (commonly
 `/boot/firmware/config.txt` on current Raspberry Pi OS):
 
